@@ -1,9 +1,10 @@
 package policies
 
 import (
-    "fmt"
 	"context"
+	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
 )
@@ -14,6 +15,9 @@ import (
 // If ignoreKinds is given this restriction will not apply to these kinds (useful for allowing a bigger).
 // If onlyKinds is given then all other kinds will be ignored.
 func PreventTooManyIndexableTags(max int, ignoreKinds []int, onlyKinds []int) func(context.Context, *nostr.Event) (bool, string) {
+	slices.Sort(ignoreKinds)
+	slices.Sort(onlyKinds)
+
 	ignore := func(kind int) bool { return false }
 	if len(ignoreKinds) > 0 {
 		ignore = func(kind int) bool {
@@ -63,37 +67,15 @@ func PreventLargeTags(maxTagValueLen int) func(context.Context, *nostr.Event) (b
 // RestrictToSpecifiedKinds returns a function that can be used as a RejectFilter that will reject
 // any events with kinds different than the specified ones.
 func RestrictToSpecifiedKinds(kinds ...uint16) func(context.Context, *nostr.Event) (bool, string) {
-	max := 0
-	min := 0
-	for _, kind := range kinds {
-		if int(kind) > max {
-			max = int(kind)
-		}
-		if int(kind) < min {
-			min = int(kind)
-		}
-	}
+	// sort the kinds in increasing order
+	slices.Sort(kinds)
 
 	return func(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
-		// these are cheap and very questionable optimizations, but they exist for a reason:
-		// we would have to ensure that the kind number is within the bounds of a uint16 anyway
-		if event.Kind > max {
-			return true, fmt.Sprintf("event kind not allowed (it should be lower than %)", max)
-		}
-		if event.Kind < min {
-			return true, fmt.Sprintf("event kind not allowed (it should be higher than %d)", min)
-		}
-
-        // Sort the kinds in increasing order
-        slices.Sort(kinds)
-
-		// hopefully this map of uint16s is very fast
 		if _, allowed := slices.BinarySearch(kinds, uint16(event.Kind)); allowed {
 			return false, ""
 		}
 
-        allowedKindsStringFormatted := fmt.Sprintf("%d\n", kinds)
-		return true, fmt.Sprintf("Received event kind %d not allowed, only allowed are: %s", event.Kind, allowedKindsStringFormatted)
+		return true, fmt.Sprintf("received event kind %d not allowed", event.Kind)
 	}
 }
 
@@ -113,4 +95,8 @@ func PreventTimestampsInTheFuture(thresholdSeconds nostr.Timestamp) func(context
 		}
 		return false, ""
 	}
+}
+
+func RejectEventsWithBase64Media(ctx context.Context, evt *nostr.Event) (bool, string) {
+	return strings.Contains(evt.Content, "data:image/") || strings.Contains(evt.Content, "data:video/"), "event with base64 media"
 }
