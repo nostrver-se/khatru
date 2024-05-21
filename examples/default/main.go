@@ -59,7 +59,7 @@ func main() {
         w.Header().Set("content-type", "text/html")
         fmt.Fprintf(w, `<html><head></head><body>`)
         fmt.Fprintf(w, `<div style="text-align: center;">`)
-        fmt.Fprintf(w, `Connect your Nostr client to <code>wss://khatru.nostrver.se</code>`)
+        //fmt.Fprintf(w, `Connect your Nostr client to <code>wss://khatru.nostrver.se</code>`)
         fmt.Fprintf(w, `<br /><br />`)
         fmt.Fprintf(w, `This relay only accepts events with kind <code>10063</code> (Blossom mediaserver lists)`)
         fmt.Fprintf(w, `<br /><br />`)
