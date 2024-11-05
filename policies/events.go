@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 )
@@ -66,11 +67,15 @@ func PreventLargeTags(maxTagValueLen int) func(context.Context, *nostr.Event) (b
 
 // RestrictToSpecifiedKinds returns a function that can be used as a RejectFilter that will reject
 // any events with kinds different than the specified ones.
-func RestrictToSpecifiedKinds(kinds ...uint16) func(context.Context, *nostr.Event) (bool, string) {
+func RestrictToSpecifiedKinds(allowEphemeral bool, kinds ...uint16) func(context.Context, *nostr.Event) (bool, string) {
 	// sort the kinds in increasing order
 	slices.Sort(kinds)
 
 	return func(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
+		if allowEphemeral && event.IsEphemeral() {
+			return false, ""
+		}
+
 		if _, allowed := slices.BinarySearch(kinds, uint16(event.Kind)); allowed {
 			return false, ""
 		}
@@ -79,7 +84,8 @@ func RestrictToSpecifiedKinds(kinds ...uint16) func(context.Context, *nostr.Even
 	}
 }
 
-func PreventTimestampsInThePast(thresholdSeconds nostr.Timestamp) func(context.Context, *nostr.Event) (bool, string) {
+func PreventTimestampsInThePast(threshold time.Duration) func(context.Context, *nostr.Event) (bool, string) {
+	thresholdSeconds := nostr.Timestamp(threshold.Seconds())
 	return func(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
 		if nostr.Now()-event.CreatedAt > thresholdSeconds {
 			return true, "event too old"
@@ -88,7 +94,8 @@ func PreventTimestampsInThePast(thresholdSeconds nostr.Timestamp) func(context.C
 	}
 }
 
-func PreventTimestampsInTheFuture(thresholdSeconds nostr.Timestamp) func(context.Context, *nostr.Event) (bool, string) {
+func PreventTimestampsInTheFuture(threshold time.Duration) func(context.Context, *nostr.Event) (bool, string) {
+	thresholdSeconds := nostr.Timestamp(threshold.Seconds())
 	return func(ctx context.Context, event *nostr.Event) (reject bool, msg string) {
 		if event.CreatedAt-nostr.Now() > thresholdSeconds {
 			return true, "event too much in the future"

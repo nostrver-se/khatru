@@ -3,18 +3,20 @@ package khatru
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/bep/debounce"
 	"github.com/fasthttp/websocket"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip42"
+	"github.com/nbd-wtf/go-nostr/nip77"
+	"github.com/nbd-wtf/go-nostr/nip77/negentropy"
+	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/rs/cors"
 )
 
@@ -28,6 +30,8 @@ func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rl.HandleWebsocket(w, r)
 	} else if r.Header.Get("Accept") == "application/nostr+json" {
 		cors.AllowAll().Handler(http.HandlerFunc(rl.HandleNIP11)).ServeHTTP(w, r)
+	} else if r.Header.Get("Content-Type") == "application/nostr+json+rpc" {
+		cors.AllowAll().Handler(http.HandlerFunc(rl.HandleNIP86)).ServeHTTP(w, r)
 	} else {
 		rl.serveMux.ServeHTTP(w, r)
 	}
@@ -46,7 +50,7 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 		rl.Log.Printf("failed to upgrade websocket: %v\n", err)
 		return
 	}
-	rl.clients.Store(conn, struct{}{})
+
 	ticker := time.NewTicker(rl.PingPeriod)
 
 	// NIP-42 challenge
@@ -54,10 +58,16 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 	rand.Read(challenge)
 
 	ws := &WebSocket{
-		conn:      conn,
-		Request:   r,
-		Challenge: hex.EncodeToString(challenge),
+		conn:               conn,
+		Request:            r,
+		Challenge:          hex.EncodeToString(challenge),
+		negentropySessions: xsync.NewMapOf[string, *NegentropySession](),
 	}
+	ws.Context, ws.cancel = context.WithCancel(context.Background())
+
+	rl.clientsMutex.Lock()
+	rl.clients[ws] = make([]listenerSpec, 0, 2)
+	rl.clientsMutex.Unlock()
 
 	ctx, cancel := context.WithCancel(
 		context.WithValue(
@@ -73,20 +83,19 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 
 		ticker.Stop()
 		cancel()
-		if _, ok := rl.clients.Load(conn); ok {
-			conn.Close()
-			rl.clients.Delete(conn)
-			removeListener(ws)
-		}
+		ws.cancel()
+		ws.conn.Close()
+
+		rl.removeClientAndListeners(ws)
 	}
 
 	go func() {
 		defer kill()
 
-		conn.SetReadLimit(rl.MaxMessageSize)
-		conn.SetReadDeadline(time.Now().Add(rl.PongWait))
-		conn.SetPongHandler(func(string) error {
-			conn.SetReadDeadline(time.Now().Add(rl.PongWait))
+		ws.conn.SetReadLimit(rl.MaxMessageSize)
+		ws.conn.SetReadDeadline(time.Now().Add(rl.PongWait))
+		ws.conn.SetPongHandler(func(string) error {
+			ws.conn.SetReadDeadline(time.Now().Add(rl.PongWait))
 			return nil
 		})
 
@@ -95,7 +104,7 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for {
-			typ, message, err := conn.ReadMessage()
+			typ, message, err := ws.conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(
 					err,
@@ -107,6 +116,7 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 				) {
 					rl.Log.Printf("unexpected close error from %s: %v\n", r.Header.Get("X-Forwarded-For"), err)
 				}
+				ws.cancel()
 				return
 			}
 
@@ -118,16 +128,20 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 			go func(message []byte) {
 				envelope := nostr.ParseMessage(message)
 				if envelope == nil {
-					// stop silently
-					return
+					if !rl.Negentropy {
+						// stop silently
+						return
+					}
+					envelope = nip77.ParseNegMessage(message)
+					if envelope == nil {
+						return
+					}
 				}
 
 				switch env := envelope.(type) {
 				case *nostr.EventEnvelope:
 					// check id
-					hash := sha256.Sum256(env.Event.Serialize())
-					id := hex.EncodeToString(hash[:])
-					if id != env.Event.ID {
+					if !env.Event.CheckID() {
 						ws.WriteJSON(nostr.OKEnvelope{EventID: env.Event.ID, OK: false, Reason: "invalid: id is computed incorrectly"})
 						return
 					}
@@ -166,25 +180,31 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 
+					srl := rl
+					if rl.getSubRelayFromEvent != nil {
+						srl = rl.getSubRelayFromEvent(&env.Event)
+					}
+
 					var ok bool
 					var writeErr error
 					var skipBroadcast bool
+
 					if env.Event.Kind == 5 {
 						// this always returns "blocked: " whenever it returns an error
-						writeErr = rl.handleDeleteRequest(ctx, &env.Event)
+						writeErr = srl.handleDeleteRequest(ctx, &env.Event)
 					} else {
 						// this will also always return a prefixed reason
-						skipBroadcast, writeErr = rl.AddEvent(ctx, &env.Event)
+						skipBroadcast, writeErr = srl.AddEvent(ctx, &env.Event)
 					}
 
 					var reason string
 					if writeErr == nil {
 						ok = true
-						for _, ovw := range rl.OverwriteResponseEvent {
+						for _, ovw := range srl.OverwriteResponseEvent {
 							ovw(ctx, &env.Event)
 						}
 						if !skipBroadcast {
-							notifyListeners(&env.Event)
+							srl.notifyListeners(&env.Event)
 						}
 					} else {
 						reason = writeErr.Error()
@@ -198,9 +218,14 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 						ws.WriteJSON(nostr.ClosedEnvelope{SubscriptionID: env.SubscriptionID, Reason: "unsupported: this relay does not support NIP-45"})
 						return
 					}
+
 					var total int64
 					for _, filter := range env.Filters {
-						total += rl.handleCountRequest(ctx, ws, filter)
+						srl := rl
+						if rl.getSubRelayFromFilter != nil {
+							srl = rl.getSubRelayFromFilter(filter)
+						}
+						total += srl.handleCountRequest(ctx, ws, filter)
 					}
 					ws.WriteJSON(nostr.CountEnvelope{SubscriptionID: env.SubscriptionID, Count: &total})
 				case *nostr.ReqEnvelope:
@@ -215,7 +240,11 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 
 					// handle each filter separately -- dispatching events as they're loaded from databases
 					for _, filter := range env.Filters {
-						err := rl.handleRequest(reqCtx, env.SubscriptionID, &eose, ws, filter)
+						srl := rl
+						if rl.getSubRelayFromFilter != nil {
+							srl = rl.getSubRelayFromFilter(filter)
+						}
+						err := srl.handleRequest(reqCtx, env.SubscriptionID, &eose, ws, filter)
 						if err != nil {
 							// fail everything if any filter is rejected
 							reason := err.Error()
@@ -225,6 +254,8 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 							ws.WriteJSON(nostr.ClosedEnvelope{SubscriptionID: env.SubscriptionID, Reason: reason})
 							cancelReqCtx(errors.New("filter rejected"))
 							return
+						} else {
+							rl.addListener(ws, env.SubscriptionID, srl, filter, cancelReqCtx)
 						}
 					}
 
@@ -235,10 +266,9 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 						cancelReqCtx(nil)
 						ws.WriteJSON(nostr.EOSEEnvelope(env.SubscriptionID))
 					}()
-
-					setListener(env.SubscriptionID, ws, env.Filters, cancelReqCtx)
 				case *nostr.CloseEnvelope:
-					removeListenerId(ws, string(*env))
+					id := string(*env)
+					rl.removeListenerId(ws, id)
 				case *nostr.AuthEnvelope:
 					wsBaseUrl := strings.Replace(rl.ServiceURL, "http", "ws", 1)
 					if pubkey, ok := nip42.ValidateAuthEvent(&env.Event, ws.Challenge, wsBaseUrl); ok {
@@ -253,6 +283,75 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 					} else {
 						ws.WriteJSON(nostr.OKEnvelope{EventID: env.Event.ID, OK: false, Reason: "error: failed to authenticate"})
 					}
+				case *nip77.OpenEnvelope:
+					srl := rl
+					if rl.getSubRelayFromFilter != nil {
+						srl = rl.getSubRelayFromFilter(env.Filter)
+						if !srl.Negentropy {
+							// ignore
+							return
+						}
+					}
+					vec, err := srl.startNegentropySession(ctx, env.Filter)
+					if err != nil {
+						// fail everything if any filter is rejected
+						reason := err.Error()
+						if strings.HasPrefix(reason, "auth-required:") {
+							RequestAuth(ctx)
+						}
+						ws.WriteJSON(nip77.ErrorEnvelope{SubscriptionID: env.SubscriptionID, Reason: reason})
+						return
+					}
+
+					// reconcile to get the next message and return it
+					neg := negentropy.New(vec, 1024*1024)
+					out, err := neg.Reconcile(env.Message)
+					if err != nil {
+						ws.WriteJSON(nip77.ErrorEnvelope{SubscriptionID: env.SubscriptionID, Reason: err.Error()})
+						return
+					}
+					ws.WriteJSON(nip77.MessageEnvelope{SubscriptionID: env.SubscriptionID, Message: out})
+
+					// if the message is not empty that means we'll probably have more reconciliation sessions, so store this
+					if out != "" {
+						deb := debounce.New(time.Second * 7)
+						negSession := &NegentropySession{
+							neg: neg,
+							postponeClose: func() {
+								deb(func() {
+									ws.negentropySessions.Delete(env.SubscriptionID)
+								})
+							},
+						}
+						negSession.postponeClose()
+
+						ws.negentropySessions.Store(env.SubscriptionID, negSession)
+					}
+				case *nip77.MessageEnvelope:
+					negSession, ok := ws.negentropySessions.Load(env.SubscriptionID)
+					if !ok {
+						// bad luck, your request was destroyed
+						ws.WriteJSON(nip77.ErrorEnvelope{SubscriptionID: env.SubscriptionID, Reason: "CLOSED"})
+						return
+					}
+					// reconcile to get the next message and return it
+					out, err := negSession.neg.Reconcile(env.Message)
+					if err != nil {
+						ws.WriteJSON(nip77.ErrorEnvelope{SubscriptionID: env.SubscriptionID, Reason: err.Error()})
+						ws.negentropySessions.Delete(env.SubscriptionID)
+						return
+					}
+					ws.WriteJSON(nip77.MessageEnvelope{SubscriptionID: env.SubscriptionID, Message: out})
+
+					// if there is more reconciliation to do, postpone this
+					if out != "" {
+						negSession.postponeClose()
+					} else {
+						// otherwise we can just close it
+						ws.negentropySessions.Delete(env.SubscriptionID)
+					}
+				case *nip77.CloseEnvelope:
+					ws.negentropySessions.Delete(env.SubscriptionID)
 				}
 			}(message)
 		}
@@ -276,15 +375,4 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-}
-
-func (rl *Relay) HandleNIP11(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/nostr+json")
-
-	info := *rl.Info
-	for _, ovw := range rl.OverwriteRelayInformation {
-		info = ovw(r.Context(), r, info)
-	}
-
-	json.NewEncoder(w).Encode(info)
 }

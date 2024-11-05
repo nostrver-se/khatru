@@ -9,6 +9,7 @@ import (
 const (
 	wsKey = iota
 	subscriptionIdKey
+	nip86HeaderAuthKey
 )
 
 func RequestAuth(ctx context.Context) {
@@ -22,29 +23,32 @@ func RequestAuth(ctx context.Context) {
 }
 
 func GetConnection(ctx context.Context) *WebSocket {
-	return ctx.Value(wsKey).(*WebSocket)
+	wsi := ctx.Value(wsKey)
+	if wsi != nil {
+		return wsi.(*WebSocket)
+	}
+	return nil
 }
 
 func GetAuthed(ctx context.Context) string {
-	return GetConnection(ctx).AuthedPublicKey
+	if conn := GetConnection(ctx); conn != nil {
+		return conn.AuthedPublicKey
+	}
+	if nip86Auth := ctx.Value(nip86HeaderAuthKey); nip86Auth != nil {
+		return nip86Auth.(string)
+	}
+	return ""
 }
 
 func GetIP(ctx context.Context) string {
-	return GetIPFromRequest(GetConnection(ctx).Request)
+	conn := GetConnection(ctx)
+	if conn == nil {
+		return ""
+	}
+
+	return GetIPFromRequest(conn.Request)
 }
 
 func GetSubscriptionID(ctx context.Context) string {
 	return ctx.Value(subscriptionIdKey).(string)
-}
-
-func GetOpenSubscriptions(ctx context.Context) []nostr.Filter {
-	if subs, ok := listeners.Load(GetConnection(ctx)); ok {
-		res := make([]nostr.Filter, 0, listeners.Size()*2)
-		subs.Range(func(_ string, sub *Listener) bool {
-			res = append(res, sub.filters...)
-			return true
-		})
-		return res
-	}
-	return nil
 }

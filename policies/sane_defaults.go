@@ -13,12 +13,11 @@ func ApplySaneDefaults(relay *khatru.Relay) {
 	)
 
 	relay.RejectFilter = append(relay.RejectFilter,
-		NoEmptyFilters,
 		NoComplexFilters,
 		FilterIPRateLimiter(20, time.Minute, 100),
 	)
 
 	relay.RejectConnection = append(relay.RejectConnection,
-		ConnectionRateLimiter(1, time.Minute*5, 3),
+		ConnectionRateLimiter(1, time.Minute*5, 10),
 	)
 }

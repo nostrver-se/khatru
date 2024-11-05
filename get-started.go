@@ -15,6 +15,10 @@ func (rl *Relay) Router() *http.ServeMux {
 	return rl.serveMux
 }
 
+func (rl *Relay) SetRouter(mux *http.ServeMux) {
+	rl.serveMux = mux
+}
+
 // Start creates an http server and starts listening on given host and port.
 func (rl *Relay) Start(host string, port int, started ...chan bool) error {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
@@ -49,11 +53,13 @@ func (rl *Relay) Start(host string, port int, started ...chan bool) error {
 // Shutdown sends a websocket close control message to all connected clients.
 func (rl *Relay) Shutdown(ctx context.Context) {
 	rl.httpServer.Shutdown(ctx)
-
-	rl.clients.Range(func(conn *websocket.Conn, _ struct{}) bool {
-		conn.WriteControl(websocket.CloseMessage, nil, time.Now().Add(time.Second))
-		conn.Close()
-		rl.clients.Delete(conn)
-		return true
-	})
+	rl.clientsMutex.Lock()
+	defer rl.clientsMutex.Unlock()
+	for ws := range rl.clients {
+		ws.conn.WriteControl(websocket.CloseMessage, nil, time.Now().Add(time.Second))
+		ws.cancel()
+		ws.conn.Close()
+	}
+	clear(rl.clients)
+	rl.listeners = rl.listeners[:0]
 }
