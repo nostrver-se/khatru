@@ -2,29 +2,17 @@ package main
 
 import (
 	"fmt"
-	//"context"
 	"net/http"
-	"os"
-	//"slices"
 
 	"github.com/fiatjaf/eventstore/sqlite3"
 	"github.com/fiatjaf/khatru"
-	"github.com/fiatjaf/khatru/policies"
-	//"github.com/nbd-wtf/go-nostr"
+    "github.com/fiatjaf/khatru/policies"
 )
 
 func main() {
-    relay := khatru.NewRelay()
+	relay := khatru.NewRelay()
 
-	// NIP-11 info
-	relay.Info.Name = "khatru.nostrver.se"
-    relay.Info.PubKey = "npub1qe3e5wrvnsgpggtkytxteaqfprz0rgxr8c3l34kk3a9t7e2l3acslezefe"
-    relay.Info.Contact = "info@sebastix.nl"
-    relay.Info.Description = "Custom relay build with Khatru"
-    relay.Info.Version = "0.0.1"
-
-	db := sqlite3.SQLite3Backend{DatabaseURL: "./data/khatru-sqlite"}
-	os.MkdirAll("./data", 0755)
+	db := sqlite3.SQLite3Backend{DatabaseURL: "/tmp/khatru-sqlite-tmp"}
 	if err := db.Init(); err != nil {
 		panic(err)
 	}
@@ -35,7 +23,7 @@ func main() {
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 
     allowedEventKinds := []uint16{37515, 33811, 13811, 30100, 31001, 34235, 34236}
-	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(allowedEventKinds[0], allowedEventKinds[1]))
+	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(true, allowedEventKinds[0]))
 
     // Custom policy
     //relay.RejectEvent = append(relay.RejectEvent,
