@@ -34,7 +34,7 @@ func main() {
 	relay.CountEvents = append(relay.CountEvents, db.CountEvents)
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 
-    allowedEventKinds := []uint16{37515, 13811}
+    allowedEventKinds := []uint16{37515, 33811, 13811, 30100, 31001, 34235, 34236}
 	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(allowedEventKinds[0], allowedEventKinds[1]))
 
     // Custom policy
@@ -61,9 +61,17 @@ func main() {
         fmt.Fprintf(w, `<div style="text-align: center;">`)
         fmt.Fprintf(w, `Connect your Nostr client to <code>wss://khatru.nostrver.se</code>`)
         fmt.Fprintf(w, `<br /><br />`)
-        fmt.Fprintf(w, `This relay only accepts events with kind <code>37515</code> (places) and <code>13811</code> (check-ins)`)
+        fmt.Fprintf(w, `This relay only accepts events with kind:`)
+        fmt.Fprintf(w, `<br />`)
+        fmt.Fprintf(w, `- <code>37515</code> (places)`)
+        fmt.Fprintf(w, `<br />`)
+        fmt.Fprintf(w, `- <code>33811, 13811</code> (check-ins)`)
+        fmt.Fprintf(w, `<br />`)
+        fmt.Fprintf(w, `- <code>34235, 34236</code> (NIP-71)`)
+        fmt.Fprintf(w, `<br />`)
+        fmt.Fprintf(w, `<code>30100, 30101</code> (draft NIP-113 activity events)`)
         fmt.Fprintf(w, `<br /><br />`)
-        fmt.Fprintf(w, `<a href="https://github.com/Sebastix/khatru" target="https://github.com/Sebastix/khatru">https://github.com/Sebastix/khatru</a>`)
+        fmt.Fprintf(w, `<a href="https://github.com/nostrver-se/khatru" target="_blank">https://github.com/nostrver-se/khatru</a>`)
         fmt.Fprintf(w, `</div>`)
         fmt.Fprintf(w, `</body></html>`)
     })
