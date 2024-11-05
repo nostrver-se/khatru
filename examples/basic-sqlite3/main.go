@@ -12,7 +12,14 @@ import (
 func main() {
 	relay := khatru.NewRelay()
 
-	db := sqlite3.SQLite3Backend{DatabaseURL: "/tmp/khatru-sqlite-tmp"}
+	// NIP-11 info
+    relay.Info.Name = "khatru.nostrver.se"
+    relay.Info.PubKey = "npub1qe3e5wrvnsgpggtkytxteaqfprz0rgxr8c3l34kk3a9t7e2l3acslezefe"
+    relay.Info.Contact = "info@sebastix.nl"
+    relay.Info.Description = "Custom relay build with Khatru"
+    relay.Info.Version = "0.0.2"
+
+	db := sqlite3.SQLite3Backend{DatabaseURL: "../../data/khatru-sqlite"}
 	if err := db.Init(); err != nil {
 		panic(err)
 	}
@@ -51,11 +58,11 @@ func main() {
         fmt.Fprintf(w, `<br /><br />`)
         fmt.Fprintf(w, `This relay only accepts events with kind:`)
         fmt.Fprintf(w, `<br />`)
-        fmt.Fprintf(w, `- <code>37515</code> (places)`)
+        fmt.Fprintf(w, `<code>37515</code> (places)`)
         fmt.Fprintf(w, `<br />`)
-        fmt.Fprintf(w, `- <code>33811, 13811</code> (check-ins)`)
+        fmt.Fprintf(w, `<code>33811, 13811</code> (check-ins)`)
         fmt.Fprintf(w, `<br />`)
-        fmt.Fprintf(w, `- <code>34235, 34236</code> (NIP-71)`)
+        fmt.Fprintf(w, `<code>34235, 34236</code> (NIP-71)`)
         fmt.Fprintf(w, `<br />`)
         fmt.Fprintf(w, `<code>30100, 30101</code> (draft NIP-113 activity events)`)
         fmt.Fprintf(w, `<br /><br />`)
