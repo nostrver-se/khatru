@@ -5,22 +5,27 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/fasthttp/websocket"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip11"
+	"github.com/nbd-wtf/go-nostr/nip45/hyperloglog"
 )
 
 func NewRelay() *Relay {
+	ctx := context.Background()
+
 	rl := &Relay{
 		Log: log.New(os.Stderr, "[khatru-relay] ", log.LstdFlags),
 
 		Info: &nip11.RelayInformationDocument{
 			Software:      "https://github.com/fiatjaf/khatru",
 			Version:       "n/a",
-			SupportedNIPs: []int{1, 11, 42, 70, 86},
+			SupportedNIPs: []any{1, 11, 40, 42, 70, 86},
 		},
 
 		upgrader: websocket.Upgrader{
@@ -40,25 +45,30 @@ func NewRelay() *Relay {
 		MaxMessageSize: 512000,
 	}
 
+	rl.expirationManager = newExpirationManager(rl)
+	go rl.expirationManager.start(ctx)
+
 	return rl
 }
 
 type Relay struct {
+	// setting this variable overwrites the hackish workaround we do to try to figure out our own base URL
 	ServiceURL string
 
 	// hooks that will be called at various times
 	RejectEvent               []func(ctx context.Context, event *nostr.Event) (reject bool, msg string)
 	OverwriteDeletionOutcome  []func(ctx context.Context, target *nostr.Event, deletion *nostr.Event) (acceptDeletion bool, msg string)
 	StoreEvent                []func(ctx context.Context, event *nostr.Event) error
+	ReplaceEvent              []func(ctx context.Context, event *nostr.Event) error
 	DeleteEvent               []func(ctx context.Context, event *nostr.Event) error
 	OnEventSaved              []func(ctx context.Context, event *nostr.Event)
 	OnEphemeralEvent          []func(ctx context.Context, event *nostr.Event)
 	RejectFilter              []func(ctx context.Context, filter nostr.Filter) (reject bool, msg string)
 	RejectCountFilter         []func(ctx context.Context, filter nostr.Filter) (reject bool, msg string)
 	OverwriteFilter           []func(ctx context.Context, filter *nostr.Filter)
-	OverwriteCountFilter      []func(ctx context.Context, filter *nostr.Filter)
 	QueryEvents               []func(ctx context.Context, filter nostr.Filter) (chan *nostr.Event, error)
 	CountEvents               []func(ctx context.Context, filter nostr.Filter) (int64, error)
+	CountEventsHLL            []func(ctx context.Context, filter nostr.Filter, offset int) (int64, *hyperloglog.HyperLogLog, error)
 	RejectConnection          []func(r *http.Request) bool
 	OnConnect                 []func(ctx context.Context)
 	OnDisconnect              []func(ctx context.Context)
@@ -103,4 +113,33 @@ type Relay struct {
 	PongWait       time.Duration // Time allowed to read the next pong message from the peer.
 	PingPeriod     time.Duration // Send pings to peer with this period. Must be less than pongWait.
 	MaxMessageSize int64         // Maximum message size allowed from peer.
+
+	// NIP-40 expiration manager
+	expirationManager *expirationManager
+}
+
+func (rl *Relay) getBaseURL(r *http.Request) string {
+	if rl.ServiceURL != "" {
+		return rl.ServiceURL
+	}
+
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if proto == "" {
+		if host == "localhost" {
+			proto = "http"
+		} else if strings.Index(host, ":") != -1 {
+			// has a port number
+			proto = "http"
+		} else if _, err := strconv.Atoi(strings.ReplaceAll(host, ".", "")); err == nil {
+			// it's a naked IP
+			proto = "http"
+		} else {
+			proto = "https"
+		}
+	}
+	return proto + "://" + host
 }

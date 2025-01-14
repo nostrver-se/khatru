@@ -2,14 +2,15 @@
 outline: deep
 ---
 
+# Event Storage
+
+Khatru doesn't make any assumptions about how you'll want to store events. Any function can be plugged in to the `StoreEvent`, `DeleteEvent`, `ReplaceEvent` and `QueryEvents` hooks.
+
+However the [`eventstore`](https://github.com/fiatjaf/eventstore) library has adapters that you can easily plug into `khatru`'s hooks.
+
 # Using the `eventstore` library
 
-The [`eventstore`](https://github.com/fiatjaf/eventstore) library has adapters that you can easily plug into `khatru`'s:
-
-* `StoreEvent`
-* `DeleteEvent`
-* `QueryEvents`
-* `CountEvents`
+The library includes many different adapters -- often called "backends" --, written by different people and with different levels of quality, reliability and speed.
 
 For all of them you start by instantiating a struct containing some basic options and a pointer (a file path for local databases, a connection string for remote databases) to the data. Then you call `.Init()` and if all is well you're ready to start storing, querying and deleting events, so you can pass the respective functions to their `khatru` counterparts. These eventstores also expose a `.Close()` function that must be called if you're going to stop using that store and keep your application open.
 
@@ -38,6 +39,7 @@ func main() {
 	relay.QueryEvents = append(relay.QueryEvents, db.QueryEvents)
 	relay.CountEvents = append(relay.CountEvents, db.CountEvents)
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
+	relay.ReplaceEvent = append(relay.ReplaceEvent, db.ReplaceEvent)
 
 	fmt.Println("running on :3334")
 	http.ListenAndServe(":3334", relay)
@@ -95,7 +97,3 @@ For example, maybe you want kind 1 events in `db1` and kind 30023 events in `db3
 		}
 	})
 ```
-
-## Search
-
-See [search](search).
