@@ -34,8 +34,8 @@ func main() {
 	relay.CountEvents = append(relay.CountEvents, db.CountEvents)
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 
-    allowedEventKinds := []uint16{10063}
-	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(allowedEventKinds[0]))
+  allowedEventKinds := []uint16{10063}
+	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(true, allowedEventKinds[0]))
 
     // Custom policy
     //relay.RejectEvent = append(relay.RejectEvent,
