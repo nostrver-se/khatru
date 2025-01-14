@@ -18,13 +18,12 @@ func startRateLimitSystem[K comparable](
 	go func() {
 		for {
 			time.Sleep(interval)
-			negativeBuckets.Range(func(key K, bucket *atomic.Int32) bool {
+			for key, bucket := range negativeBuckets.Range {
 				newv := bucket.Add(int32(-tokensPerInterval))
 				if newv <= 0 {
 					negativeBuckets.Delete(key)
 				}
-				return true
-			})
+			}
 		}
 	}()
 
