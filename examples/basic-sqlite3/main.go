@@ -17,7 +17,7 @@ func main() {
     relay.Info.PubKey = "npub1qe3e5wrvnsgpggtkytxteaqfprz0rgxr8c3l34kk3a9t7e2l3acslezefe"
     relay.Info.Contact = "info@sebastix.nl"
     relay.Info.Description = "Custom relay build with Khatru"
-    relay.Info.Version = "0.0.2"
+    relay.Info.Version = "0.0.3"
 
 	db := sqlite3.SQLite3Backend{DatabaseURL: "../../data/khatru-sqlite"}
 	if err := db.Init(); err != nil {
@@ -30,7 +30,7 @@ func main() {
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 	relay.ReplaceEvent = append(relay.ReplaceEvent, db.ReplaceEvent)
 
-    allowedEventKinds := []uint16{37515, 33811, 13811, 30100, 31001, 34235, 34236}
+    allowedEventKinds := []uint16{37515, 33811, 13811, 30100, 31001, 34235, 34236, 39700, 1111}
 	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(true, allowedEventKinds[0]))
 
     // Custom policy
@@ -59,13 +59,17 @@ func main() {
         fmt.Fprintf(w, `<br /><br />`)
         fmt.Fprintf(w, `This relay only accepts events with kind:`)
         fmt.Fprintf(w, `<br />`)
-        fmt.Fprintf(w, `<code>37515</code> (places)`)
+          fmt.Fprintf(w, `<code>1111</code> (comment <a href="https://nips.nostr.com/22">NIP-22</a>)`)
         fmt.Fprintf(w, `<br />`)
-        fmt.Fprintf(w, `<code>33811, 13811</code> (check-ins)`)
+        fmt.Fprintf(w, `<code>37515</code> (geo places)`)
         fmt.Fprintf(w, `<br />`)
-        fmt.Fprintf(w, `<code>34235, 34236</code> (NIP-71)`)
+        fmt.Fprintf(w, `<code>33811, 13811</code> (check-ins on geo places)`)
         fmt.Fprintf(w, `<br />`)
-        fmt.Fprintf(w, `<code>30100, 30101</code> (draft NIP-113 activity events)`)
+        fmt.Fprintf(w, `<code>34235, 34236</code> (<a href="https://nips.nostr.com/71">NIP-71</a>)`)
+        fmt.Fprintf(w, `<br />`)
+        fmt.Fprintf(w, `<code>30100, 30101</code> (draft <a href="https://github.com/nostr-protocol/nips/pull/1423">NIP-113</a> activity events)`)
+        fmt.Fprintf(w, `<br />`)
+        fmt.Fprintf(w, `<code>39700</code> (draft <a href="https://github.com/nostr-protocol/nips/pull/1847">NIP-B0</a> web bookmarks)`)
         fmt.Fprintf(w, `<br /><br />`)
         fmt.Fprintf(w, `<a href="https://github.com/nostrver-se/khatru" target="_blank">https://github.com/nostrver-se/khatru</a>`)
         fmt.Fprintf(w, `</div>`)
