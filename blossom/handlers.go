@@ -22,7 +22,7 @@ func (bs BlossomServer) handleUploadCheck(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if auth == nil {
-		blossomError(w, "missing \"Authorization\" header", 400)
+		blossomError(w, "missing \"Authorization\" header", 401)
 		return
 	}
 	if auth.Tags.GetFirst([]string{"t", "upload"}) == nil {
@@ -52,11 +52,11 @@ func (bs BlossomServer) handleUploadCheck(w http.ResponseWriter, r *http.Request
 func (bs BlossomServer) handleUpload(w http.ResponseWriter, r *http.Request) {
 	auth, err := readAuthorization(r)
 	if err != nil {
-		blossomError(w, "invalid \"Authorization\": "+err.Error(), 400)
+		blossomError(w, "invalid \"Authorization\": "+err.Error(), 404)
 		return
 	}
 	if auth == nil {
-		blossomError(w, "missing \"Authorization\" header", 400)
+		blossomError(w, "missing \"Authorization\" header", 401)
 		return
 	}
 	if auth.Tags.GetFirst([]string{"t", "upload"}) == nil {
@@ -73,7 +73,7 @@ func (bs BlossomServer) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	// read first bytes of upload so we can find out the filetype
 	b := make([]byte, min(50, size), size)
-	if _, err = r.Body.Read(b); err != nil {
+	if n, err := r.Body.Read(b); err != nil && n != size {
 		blossomError(w, "failed to read initial bytes of upload body: "+err.Error(), 400)
 		return
 	}
@@ -206,7 +206,6 @@ func (bs BlossomServer) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	blossomError(w, "file not found", 404)
-	return
 }
 
 func (bs BlossomServer) handleHasBlob(w http.ResponseWriter, r *http.Request) {
@@ -228,8 +227,6 @@ func (bs BlossomServer) handleHasBlob(w http.ResponseWriter, r *http.Request) {
 		blossomError(w, "file not found", 404)
 		return
 	}
-
-	return
 }
 
 func (bs BlossomServer) handleList(w http.ResponseWriter, r *http.Request) {
@@ -327,6 +324,38 @@ func (bs BlossomServer) handleDelete(w http.ResponseWriter, r *http.Request) {
 				blossomError(w, "failed to delete blob: "+err.Error(), 500)
 				return
 			}
+		}
+	}
+}
+
+func (bs BlossomServer) handleReport(w http.ResponseWriter, r *http.Request) {
+	var body []byte
+	_, err := r.Body.Read(body)
+	if err != nil {
+		blossomError(w, "can't read request body", 400)
+		return
+	}
+
+	var evt *nostr.Event
+	if err := json.Unmarshal(body, evt); err != nil {
+		blossomError(w, "can't parse event", 400)
+		return
+	}
+
+	if isValid, _ := evt.CheckSignature(); !isValid {
+		blossomError(w, "invalid report event is provided", 400)
+		return
+	}
+
+	if evt.Kind != nostr.KindReporting {
+		blossomError(w, "invalid report event is provided", 400)
+		return
+	}
+
+	for _, rr := range bs.ReceiveReport {
+		if err := rr(r.Context(), evt); err != nil {
+			blossomError(w, "failed to receive report: "+err.Error(), 500)
+			return
 		}
 	}
 }

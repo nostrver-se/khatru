@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/bep/debounce"
 	"github.com/fasthttp/websocket"
@@ -115,8 +116,10 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 			onconnect(ctx)
 		}
 
+		smp := nostr.NewMessageParser()
+
 		for {
-			typ, message, err := ws.conn.ReadMessage()
+			typ, msgb, err := ws.conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(
 					err,
@@ -126,7 +129,7 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 					websocket.CloseAbnormalClosure,  // 1006
 					4537,                            // some client seems to send many of these
 				) {
-					rl.Log.Printf("unexpected close error from %s: %v\n", r.Header.Get("X-Forwarded-For"), err)
+					rl.Log.Printf("unexpected close error from %s: %v\n", GetIPFromRequest(r), err)
 				}
 				ws.cancel()
 				return
@@ -137,15 +140,19 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			go func(message []byte) {
-				envelope := nostr.ParseMessage(message)
-				if envelope == nil {
-					if !rl.Negentropy {
-						// stop silently
-						return
+			message := unsafe.String(unsafe.SliceData(msgb), len(msgb))
+
+			// parse messages sequentially otherwise sonic breaks
+			envelope, err := smp.ParseMessage(message)
+
+			// then delegate to the goroutine
+			go func(message string) {
+				if err != nil {
+					if err == nostr.UnknownLabel && rl.Negentropy {
+						envelope = nip77.ParseNegMessage(message)
 					}
-					envelope = nip77.ParseNegMessage(message)
 					if envelope == nil {
+						ws.WriteJSON(nostr.NoticeEnvelope("failed to parse envelope: " + err.Error()))
 						return
 					}
 				}
@@ -235,32 +242,15 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 					var hll *hyperloglog.HyperLogLog
 					uneligibleForHLL := false
 
-					for _, filter := range env.Filters {
-						srl := rl
-						if rl.getSubRelayFromFilter != nil {
-							srl = rl.getSubRelayFromFilter(filter)
-						}
+					srl := rl
+					if rl.getSubRelayFromFilter != nil {
+						srl = rl.getSubRelayFromFilter(env.Filter)
+					}
 
-						if offset := nip45.HyperLogLogEventPubkeyOffsetForFilter(filter); offset != -1 && !uneligibleForHLL {
-							partial, phll := srl.handleCountRequestWithHLL(ctx, ws, filter, offset)
-							if phll != nil {
-								if hll == nil {
-									// in the first iteration (which should be the only case of the times)
-									// we optimize slightly by assigning instead of merging
-									hll = phll
-								} else {
-									hll.Merge(phll)
-								}
-							} else {
-								// if any of the filters is uneligible then we will discard previous HLL results
-								// and refuse to do HLL at all anymore for this query
-								uneligibleForHLL = true
-								hll = nil
-							}
-							total += partial
-						} else {
-							total += srl.handleCountRequest(ctx, ws, filter)
-						}
+					if offset := nip45.HyperLogLogEventPubkeyOffsetForFilter(env.Filter); offset != -1 && !uneligibleForHLL {
+						total, hll = srl.handleCountRequestWithHLL(ctx, ws, env.Filter, offset)
+					} else {
+						total = srl.handleCountRequest(ctx, ws, env.Filter)
 					}
 
 					resp := nostr.CountEnvelope{
@@ -305,10 +295,8 @@ func (rl *Relay) HandleWebsocket(w http.ResponseWriter, r *http.Request) {
 					}
 
 					go func() {
-						// when all events have been loaded from databases and dispatched
-						// we can cancel the context and fire the EOSE message
+						// when all events have been loaded from databases and dispatched we can fire the EOSE message
 						eose.Wait()
-						cancelReqCtx(nil)
 						ws.WriteJSON(nostr.EOSEEnvelope(env.SubscriptionID))
 					}()
 				case *nostr.CloseEnvelope:
