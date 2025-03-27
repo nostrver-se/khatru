@@ -19,7 +19,7 @@ func main() {
     relay.Info.Description = "Custom relay build with Khatru"
     relay.Info.Version = "0.0.3"
 
-	db := sqlite3.SQLite3Backend{DatabaseURL: "../../data/khatru-sqlite"}
+	db := sqlite3.SQLite3Backend{DatabaseURL: "/var/www/khatru.nostrver.se/data/khatru-sqlite"}
 	if err := db.Init(); err != nil {
 		panic(err)
 	}
