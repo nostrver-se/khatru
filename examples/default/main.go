@@ -34,7 +34,7 @@ func main() {
 	relay.CountEvents = append(relay.CountEvents, db.CountEvents)
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 
-  allowedEventKinds := []uint16{10063}
+  allowedEventKinds := []uint16{24242,10063, 34128}
 	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(true, allowedEventKinds[0]))
 
     // Custom policy
@@ -59,9 +59,13 @@ func main() {
         w.Header().Set("content-type", "text/html")
         fmt.Fprintf(w, `<html><head></head><body>`)
         fmt.Fprintf(w, `<div style="text-align: center;">`)
-        //fmt.Fprintf(w, `Connect your Nostr client to <code>wss://khatru.nostrver.se</code>`)
         fmt.Fprintf(w, `<br /><br />`)
-        fmt.Fprintf(w, `This relay only accepts events with kind <code>10063</code> (Blossom mediaserver lists)`)
+        fmt.Fprintf(w, `This relay only accepts events with kinds:`)
+        fmt.Fprintf(w, `<ul>`)
+        fmt.Fprintf(w, `<li><code>24242</code> (Authorization event)</li>`)
+        fmt.Fprintf(w, `<li><code>10063</code> (User Blossom servers list event)</li>`)
+        fmt.Fprintf(w, `<li><code>34128</code> (Static file event)</li>`)
+        fmt.Fprintf(w, `</ul>`)
         fmt.Fprintf(w, `<br /><br />`)
         fmt.Fprintf(w, `<a href="https://github.com/Sebastix/khatru/tree/relay.nosto.re" target="https://github.com/Sebastix/khatru/tree/relay.nosto.re">https://github.com/Sebastix/khatru/tree/relay.nosto.re</a>`)
         fmt.Fprintf(w, `</div>`)
