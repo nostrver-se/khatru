@@ -1,0 +1,5 @@
+*.env
+.idea/
+knowledge.md
+data
+.DS_Store
