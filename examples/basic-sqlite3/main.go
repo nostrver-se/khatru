@@ -30,7 +30,7 @@ func main() {
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 	relay.ReplaceEvent = append(relay.ReplaceEvent, db.ReplaceEvent)
 
-  allowedEventKinds := []uint16{1111}
+  allowedEventKinds := []uint16{1111,21,22,34235,34236}
 	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(true, allowedEventKinds[0]))
 
     // Custom policy
@@ -57,11 +57,15 @@ func main() {
         fmt.Fprintf(w, `<div style="text-align: center;">`)
         fmt.Fprintf(w, `Connect your Nostr client to <code>wss://relay.kubo.watch</code>`)
         fmt.Fprintf(w, `<br /><br />`)
+        fmt.Fprintf(w, `This relay only accepts events from authors: @todo`)
+        fmt.Fprintf(w, `<br /><br />`)
         fmt.Fprintf(w, `This relay only accepts events with kind:`)
         fmt.Fprintf(w, `<br />`)
         fmt.Fprintf(w, `<code>1111</code> (comment <a href="https://nips.nostr.com/22">NIP-22</a>)`)
-        // fmt.Fprintf(w, `<br /><br />`)
-        // fmt.Fprintf(w, `<a href="https://github.com/nostrver-se/khatru" target="_blank">https://github.com/nostrver-se/khatru</a>`)
+        fmt.Fprintf(w, `<br />`)
+        fmt.Fprintf(w, `<code>21</code>, <code>22</code>, <code>34235</code>, <code>34236</code> (comment <a href="https://nips.nostr.com/71">NIP-71</a>)`)
+        fmt.Fprintf(w, `<br /><br />`)
+        fmt.Fprintf(w, `<a href="https://github.com/nostrver-se/khatru/tree/relay.kubo.watch" target="_blank">https://github.com/nostrver-se/khatru/tree/relay.kubo.watch</a>`)
         fmt.Fprintf(w, `</div>`)
         fmt.Fprintf(w, `</body></html>`)
     })
