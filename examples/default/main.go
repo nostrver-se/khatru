@@ -20,7 +20,7 @@ func main() {
 	relay.Info.Name = "relay.nosto.re"
     relay.Info.PubKey = "npub1qe3e5wrvnsgpggtkytxteaqfprz0rgxr8c3l34kk3a9t7e2l3acslezefe"
     relay.Info.Contact = "info@sebastix.nl"
-    relay.Info.Description = "Relay server 10063 event kinds for Blossom blobs"
+    relay.Info.Description = "Relay optimized for Blossom"
     relay.Info.Version = "0.1"
 
 	db := sqlite3.SQLite3Backend{DatabaseURL: "./data/khatru-sqlite"}
@@ -34,7 +34,7 @@ func main() {
 	relay.CountEvents = append(relay.CountEvents, db.CountEvents)
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 
-  allowedEventKinds := []uint16{24242,10063, 34128}
+  allowedEventKinds := []uint16{24242,10063,34128,15128,35128}
 	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(true, allowedEventKinds[0]))
 
     // Custom policy
@@ -58,13 +58,15 @@ func main() {
     mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("content-type", "text/html")
         fmt.Fprintf(w, `<html><head></head><body>`)
-        fmt.Fprintf(w, `<div style="text-align: center;">`)
+        fmt.Fprintf(w, `<div>`)
         fmt.Fprintf(w, `<br /><br />`)
         fmt.Fprintf(w, `This relay only accepts events with kinds:`)
         fmt.Fprintf(w, `<ul>`)
         fmt.Fprintf(w, `<li><code>24242</code> (Authorization event)</li>`)
         fmt.Fprintf(w, `<li><code>10063</code> (User Blossom servers list event)</li>`)
-        fmt.Fprintf(w, `<li><code>34128</code> (Static file event)</li>`)
+        fmt.Fprintf(w, `<li><code>34128</code> (nsite v1: static file event)</li>`)
+        fmt.Fprintf(w, `<li><code>15128</code> (nsite v2: root site manifest event)</li>`)
+        fmt.Fprintf(w, `<li><code>35128</code> (nsite v2: named site manifestl event)</li>`)
         fmt.Fprintf(w, `</ul>`)
         fmt.Fprintf(w, `<br /><br />`)
         fmt.Fprintf(w, `<a href="https://github.com/Sebastix/khatru/tree/relay.nosto.re" target="https://github.com/Sebastix/khatru/tree/relay.nosto.re">https://github.com/Sebastix/khatru/tree/relay.nosto.re</a>`)
