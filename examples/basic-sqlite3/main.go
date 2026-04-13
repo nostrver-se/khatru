@@ -30,7 +30,7 @@ func main() {
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 	relay.ReplaceEvent = append(relay.ReplaceEvent, db.ReplaceEvent)
 
-  allowedEventKinds := []uint16{0,3,5,1984,1985,1111,21,22,34235,34236,10040,30382,30383,30384,30385}
+  allowedEventKinds := []uint16{0,3,5,1984,1985,1111,12002,21,22,34235,34236,10040,30382,30383,30384,30385}
 	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(false, allowedEventKinds...))
 
   // Output when there is HTTP request
@@ -49,6 +49,8 @@ func main() {
       fmt.Fprintf(w, `<code>0, 3, 5</code>`)
       fmt.Fprintf(w, `<br />`)
       fmt.Fprintf(w, `<code>1984, 1985</code>`)
+      fmt.Fprintf(w, `<br />`)
+      fmt.Fprintf(w, `<code>12002</code> (see https://gitlab.com/sebastix-group/nostr/wotathon.kubo.watch#current-state)`)
       fmt.Fprintf(w, `<br />`)
       fmt.Fprintf(w, `<code>1111</code> (comment <a href="https://nips.nostr.com/22">NIP-22</a>)`)
       fmt.Fprintf(w, `<br />`)
