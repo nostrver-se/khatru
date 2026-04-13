@@ -6,7 +6,7 @@ import (
 
 	"github.com/fiatjaf/eventstore/sqlite3"
 	"github.com/fiatjaf/khatru"
-    "github.com/fiatjaf/khatru/policies"
+  "github.com/fiatjaf/khatru/policies"
 )
 
 func main() {
@@ -30,8 +30,8 @@ func main() {
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 	relay.ReplaceEvent = append(relay.ReplaceEvent, db.ReplaceEvent)
 
-    allowedEventKinds := []uint16{37515, 33811, 13811, 30100, 31001, 34235, 34236, 39700, 1111}
-	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(true, allowedEventKinds[0]))
+  allowedEventKinds := []uint16{37515, 33811, 13811, 30100, 31001, 34235, 34236, 39700, 39701, 1111, 16430, 26428, 26429, 26431, 26432, 26433, 26434}
+	relay.RejectEvent = append(relay.RejectEvent, policies.RestrictToSpecifiedKinds(false, allowedEventKinds...))
 
     // Custom policy
     //relay.RejectEvent = append(relay.RejectEvent,
@@ -59,7 +59,7 @@ func main() {
         fmt.Fprintf(w, `<br /><br />`)
         fmt.Fprintf(w, `This relay only accepts events with kind:`)
         fmt.Fprintf(w, `<br />`)
-          fmt.Fprintf(w, `<code>1111</code> (comment <a href="https://nips.nostr.com/22">NIP-22</a>)`)
+        fmt.Fprintf(w, `<code>1111</code> (comment <a href="https://nips.nostr.com/22">NIP-22</a>)`)
         fmt.Fprintf(w, `<br />`)
         fmt.Fprintf(w, `<code>37515</code> (geo places)`)
         fmt.Fprintf(w, `<br />`)
@@ -69,7 +69,9 @@ func main() {
         fmt.Fprintf(w, `<br />`)
         fmt.Fprintf(w, `<code>30100, 30101</code> (draft <a href="https://github.com/nostr-protocol/nips/pull/1423">NIP-113</a> activity events)`)
         fmt.Fprintf(w, `<br />`)
-        fmt.Fprintf(w, `<code>39700</code> (draft <a href="https://github.com/nostr-protocol/nips/pull/1847">NIP-B0</a> web bookmarks)`)
+        fmt.Fprintf(w, `<code>39700, 39701</code> (draft <a href="https://github.com/nostr-protocol/nips/pull/1847">NIP-B0</a> web bookmarks)`)
+        fmt.Fprintf(w, `<br />`)
+        fmt.Fprintf(w, `<code>26428, 26429, 16430, 26431, 26432, 26433, 26434</code> (promenade thingies)`)
         fmt.Fprintf(w, `<br /><br />`)
         fmt.Fprintf(w, `<a href="https://github.com/nostrver-se/khatru" target="_blank">https://github.com/nostrver-se/khatru</a>`)
         fmt.Fprintf(w, `</div>`)
